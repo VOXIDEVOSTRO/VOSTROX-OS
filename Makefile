@@ -1,96 +1,115 @@
-# Makefile for VOSTROX build system
+# OS Makefile with modular approach for 64-bit OS with GRUB Multiboot2
+
+# Compilers and tools
+ASM = nasm
+CC = gcc
+LD = ld
+
+# Flags
+ASMFLAGS = -f bin
+CFLAGS = -ffreestanding -nostdlib -fpic -pie -e module_main -o
 
 # Directories
 BUILDDIR = build
-TEMPDIR = $(BUILDDIR)/temp
-OVERLAYDIR = $(TEMPDIR)/overlay
+OSDIR = $(BUILDDIR)/os
 
-# Files
-INSTALLER_ISO = installer/vostrox_86.iso
-OUTPUT_ISO = $(BUILDDIR)/vostrox.iso
-INSTALLER_SCRIPT = installer/installer.sh
+# Find all source files using wildcards
+ASM_SOURCES = $(shell find . -name "*.asm" -not -path "./boot/*" -not -path "./kernel/*")
+C_SOURCES = $(shell find . -name "*.c" -not -path "./kernel/*")
+ELF_SOURCES = $(shell find . -name "*.elf" -not -path "./kernel/*" -not -path "./modules/apps/*" -not -path "./modules/sys/*")
 
-.PHONY: all clean iso os
+# Generate corresponding binary module paths
+ASM_MODULES = $(patsubst %.asm,$(BUILDDIR)/%.bin,$(ASM_SOURCES))
+C_MODULES = $(patsubst %.c,$(BUILDDIR)/%.bin,$(C_SOURCES))
+ELF_MODULES = $(patsubst %.elf,$(BUILDDIR)/%.elf,$(ELF_SOURCES))
 
-all: os iso
+.PHONY: all clean modules kernel
 
-# Create build directory structure
+all: kernel modules
+
+# Create build directories
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
-	mkdir -p $(TEMPDIR)
+	mkdir -p $(OSDIR)/boot/grub
+	mkdir -p $(OSDIR)/kernel
 
-# Build OS and then create combined ISO
-iso: os $(BUILDDIR)
-	# Extract the ISO content to temp directory
-	7z x -o$(TEMPDIR) $(INSTALLER_ISO)
-	
-	# Create os directory and copy OS files
-	mkdir -p $(TEMPDIR)/os
-	cp -r os/$(BUILDDIR)/os/* $(TEMPDIR)/os/
-	
-	# Copy GRUB directory to the root of the ISO
-	mkdir -p $(TEMPDIR)/boot
-	cp -r os/boot/grub $(TEMPDIR)
-	
-	# Create overlay directory structure
-	mkdir -p $(OVERLAYDIR)/etc/init.d
-	mkdir -p $(OVERLAYDIR)/etc/runlevels/default
-	
-	# Copy installer script to overlay
-	cp $(INSTALLER_SCRIPT) $(OVERLAYDIR)/installer.sh
-	chmod +x $(OVERLAYDIR)/installer.sh
-	
-	# Create init.d service script
-	echo '#!/sbin/openrc-run' > $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo 'description="VOSTROX OS Installer"' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo 'depend() {' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '    need net' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '}' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo 'start() {' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '    ebegin "Starting VOSTROX OS Installer"' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '    /overlay/installer.sh &' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '    eend $$?' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	echo '}' >> $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	chmod +x $(OVERLAYDIR)/etc/init.d/vostrox-installer
-	
-	# Enable service in default runlevel
-	ln -sf /etc/init.d/vostrox-installer $(OVERLAYDIR)/etc/runlevels/default/vostrox-installer
-	
-	# Create overlay squashfs image
-	mksquashfs $(OVERLAYDIR) $(TEMPDIR)/overlay.squashfs -comp xz
-	
-	# Update syslinux.cfg to include overlay
-	sed -i 's/quiet/quiet modloop=\/boot\/modloop-lts overlay_root=\/overlay/' $(TEMPDIR)/boot/syslinux/syslinux.cfg
-	
-	# Copy installer script to root of ISO (for backward compatibility)
-	cp $(INSTALLER_SCRIPT) $(TEMPDIR)/installer.sh
-	chmod +x $(TEMPDIR)/installer.sh
+# Build kernel using the kernel Makefile
+kernel: | $(BUILDDIR)
+	$(MAKE) -C kernel
 
-	# Copy font files to the ISO
-	cp -r fonts $(TEMPDIR)/os/modules/sys/
-	
-	# Create a new ISO with mkisofs
-	mkisofs -o $(OUTPUT_ISO) \
-		-b boot/syslinux/isolinux.bin \
-		-c boot/syslinux/boot.cat \
-		-no-emul-boot -boot-load-size 4 -boot-info-table \
-		-J -R -V "VOSTROX" \
-		$(TEMPDIR)
-	
-	# Make the ISO bootable from USB drives using isohybrid
-	isohybrid $(OUTPUT_ISO) || echo "isohybrid not available, ISO may not boot from USB"
-	
-	@echo "Combined ISO created at $(OUTPUT_ISO)"
+# Rule to create build directories for modules
+define create_dir
+	mkdir -p $(dir $@)
+endef
 
-# Build OS
-os:
-	$(MAKE) -C os
-	$(MAKE) -C apps
-#	$(MAKE) -C modules
+# Compile ASM files directly to binary modules
+$(BUILDDIR)/%.bin: %.asm
+	$(create_dir)
+	$(ASM) $(ASMFLAGS) $< -o $@
 
-# Clean build artifacts
+# Compile C files to binary modules
+$(BUILDDIR)/%.bin: %.c
+	$(create_dir)
+	$(CC) $(CFLAGS) $@ $<
+
+# Rule for ELF files (just copy them)
+$(BUILDDIR)/%.elf: %.elf
+	$(create_dir)
+	cp $< $@
+
+# Rule for BIN files (just copy them)
+$(BUILDDIR)/%.bin: %.bin
+	$(create_dir)
+	cp $< $@
+
+# Rule for SO files (just copy them)
+$(BUILDDIR)/%.so: %.so
+	$(create_dir)
+	cp $< $@
+
+# Copy all modules to the OS directory structure
+modules: $(ASM_MODULES) $(C_MODULES) $(ELF_MODULES)
+	# Copy all binary modules preserving directory structure
+	for module in $(ASM_MODULES) $(C_MODULES) $(ELF_MODULES); do \
+		target_dir=$$(dirname $${module#$(BUILDDIR)/}); \
+		mkdir -p $(OSDIR)/$$target_dir; \
+		cp $$module $(OSDIR)/$$target_dir/; \
+	done
+
+	# Copy any existing .elf files from modules/sys and modules/apps
+	mkdir -p $(OSDIR)/modules/sys
+	mkdir -p $(OSDIR)/modules/apps
+	if [ -d "modules/sys" ]; then \
+		find modules/sys -name "*.elf" -type f -exec cp {} $(OSDIR)/modules/sys/ \; ; \
+	fi
+	if [ -d "modules/apps" ]; then \
+		find modules/apps -name "*.elf" -type f -exec cp {} $(OSDIR)/modules/apps/ \; ; \
+	fi
+	if [ -d "modules/sys" ]; then \
+		find modules/sys -name "*.cfg" -type f -exec cp {} $(OSDIR)/modules/sys/ \; ; \
+	fi
+	if [ -d "modules/apps" ]; then \
+		find modules/apps -name "*.cfg" -type f -exec cp {} $(OSDIR)/modules/apps/ \; ; \
+	fi
+	if [ -d "modules" ]; then \
+		find modules -name "*.bin" -type f -exec cp {} $(OSDIR)/modules/ \; ; \
+	fi
+	if [ -d "modules" ]; then \
+		find modules -name "*.so" -type f -exec cp {} $(OSDIR)/modules/ \; ; \
+	fi
+	
+	# Create GRUB configuration file
+	echo "set timeout=0" > $(OSDIR)/boot/grub/grub.cfg
+	echo "set default=0" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "menuentry \"VOSTROX\" {" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    insmod fat" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    insmod vbe" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    insmod gfxterm" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    set root=hd0" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    multiboot2 /kernel/kernel.bin" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "    boot" >> $(OSDIR)/boot/grub/grub.cfg
+	echo "}" >> $(OSDIR)/boot/grub/grub.cfg
+
 clean:
+	$(MAKE) -C kernel clean
 	rm -rf $(BUILDDIR)
-	$(MAKE) -C os clean
-	$(MAKE) -C apps clean
-#	$(MAKE) -C modules clean
