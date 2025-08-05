@@ -1,0 +1,116 @@
+VOSTROX OS - RING 3 ISOLATION TEST
+64-bit Kernel Starting...
+
+RING3: Testing simple ELF loader with termination handling
+GDT: Setting up complete Ring 0/3 separation
+GDT: Complete Ring 0/3 separation configured
+IDT: Setting up enhanced Ring 3 protection
+IDT: Enhanced Ring 3 protection installed
+RING3: GDT and IDT setup completed
+RING3: Page fault handler initialized
+RING3: Loading /MODULES/APPS/TEST.ELF
+RING3: Waiting for Ring 3 program completion or termination...
+RING3: Ring 3 program terminated - back in kernel
+
+PAGING: Initializing proper paging system
+PAGING: Using existing PML4 table
+PAGING: Identity mapping kernel space (64MB)
+PAGING: Mapping heap area
+PAGING: Mapping extended memory (128MB-512MB)
+PAGING: Flushing TLB
+PAGING: Proper paging system initialized (512MB mapped)
+
+MEMORY: Initializing paging-based memory system
+MEMORY: Mapping heap area (256MB-512MB)
+MEMORY: Heap area mapped successfully
+MEMORY: Paging-based memory system initialized
+Memory system initialized
+
+MFS: Initializing Memory File System
+MFS: Initializing superblock fields
+MFS: Superblock fields initialized
+MFS: Manually mapping massive 512MB block (512MB-1GB)
+MFS: Need to map 100 2MB pages
+MFS: Mapped 0MB
+MFS: Mapped 40MB
+MFS: Mapped 80MB
+MFS: Mapped C0MB
+MFS: Mapped 100MB
+MFS: Mapped 140MB
+MFS: Mapped 180MB
+MFS: Mapped 1C0MB
+MFS: Massive block mapping completed
+MFS: Validating massive block mapping
+MFS: Massive block validation PASSED
+MFS: Clearing entry table in massive block
+MFS: Entry table cleared in massive block
+MFS: Memory File System with massive block foundation initialized successfully
+
+FS: Comprehensive filesystem initialization
+FAT32: Ensuring all internal buffers are mapped
+FAT32: All internal structures mapped
+FS: Comprehensive initialization completed
+File system initialized
+Listing directory: /MODULES/SYS/
+-------------------
+  [DIR]  .
+  [DIR]  ..
+  [DIR]  FONTS
+End of directory reached
+Total entries: 3
+Parsing Multiboot
+A
+tag=1
+size=2
+A
+tag=1
+size=9
+A
+tag=2
+size=9
+A
+tag=0
+size=8
+A
+tag=6
+size=2
+A
+tag=9
+size=6
+A
+tag=4
+size=6
+A
+tag=5
+size=0
+A
+tag=7
+size=4
+A
+tag=8
+size=8
+Framebuffer tag found
+Framebuffer info:
+Address: 0xE0000000
+Pitch: ‰Æ	 Width: ø Height: 
+Framebuffer pages mapped
+Color info set
+A
+tag=5
+size=4
+A
+tag=0
+size=8
+MFS: Creating segment with validation
+MFS: Segment parameters validated
+MFS: Allocating entry with validation
+MFS: Entry allocated successfully
+MFS: Entry allocated for segment
+MFS: Allocating blocks with validation
+MFS: Need 300 blocks
+MFS: Allocating at address: 0x20024000
+MFS: Clearing allocated blocks
+MFS: Blocks allocated and cleared successfully
+MFS: Blocks allocated for segment
+MFS: Segment created successfully
+renderer_init_mfs_backbuffer: Backbuffer segment allocated and cleared
